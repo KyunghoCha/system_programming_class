@@ -3,6 +3,7 @@
 int main()
 {
     int size;
+    printf("size: ");
     scanf("%d", &size);
 
     for (int i = 0; i < size; i++) {
