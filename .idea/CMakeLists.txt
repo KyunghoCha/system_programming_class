@@ -11,4 +11,5 @@ add_executable(_idea
         modules.xml
         system_programming_mine.iml
         vcs.xml
-        workspace.xml)
+        workspace.xml
+        ../merge_txt.c)
