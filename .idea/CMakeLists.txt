@@ -12,4 +12,6 @@ add_executable(_idea
         system_programming_mine.iml
         vcs.xml
         workspace.xml
-        ../merge_txt.c)
+        ../assignment2/file_type_out.c
+        ../assignment2/change_permission.c
+        ../assignment1/merge_txt.c)
