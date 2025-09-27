@@ -43,44 +43,44 @@ bool is_not_text_file(const char *);
 int main(const int argc, char *argv[]) {
     check_argument_count(argc);
 
-    pDirInfo di;
-    pFileInfo fi;
+    pDirInfo dir_info;
+    pFileInfo file_info;
 
-    init_dir_file_info(&di, &fi);
-    open_src_dir(di, argv[1]);
-    open_output_file(fi, argv[2], O_WRONLY | O_CREAT | O_TRUNC, FILE_MODE);
+    init_dir_file_info(&dir_info, &file_info);
+    open_src_dir(dir_info, argv[1]);
+    open_output_file(file_info, argv[2], O_WRONLY | O_CREAT | O_TRUNC, FILE_MODE);
 
-    while (read_src_dir(di)) {
-        if (is_not_text_file(di->entry->d_name)) continue;
-        snprintf(fi->path, PATH_MAX, "%s/%s", argv[1], di->entry->d_name);
-        open_src_file(fi, O_RDONLY, FILE_MODE);
-        while (read_src_file(fi))
-            write_output_file(fi);
-        if (close(fi->src_fd) == -1) perror("close");
+    while (read_src_dir(dir_info)) {
+        if (is_not_text_file(dir_info->entry->d_name)) continue;
+        snprintf(file_info->path, PATH_MAX, "%s/%s", argv[1], dir_info->entry->d_name);
+        open_src_file(file_info, O_RDONLY, FILE_MODE);
+        while (read_src_file(file_info))
+            write_output_file(file_info);
+        if (close(file_info->src_fd) == -1) perror("close");
     }
 
-    if (closedir(di->dirent) == -1) perror("close dir");
-    if (close(fi->output_fd) == -1) perror("close file");
+    if (closedir(dir_info->dirent) == -1) perror("close dir");
+    if (close(file_info->output_fd) == -1) perror("close file");
 
-    free(di);
-    free(fi);
+    free(dir_info);
+    free(file_info);
 
     return 0;
 }
 
-void init_dir_file_info(pDirInfo *di, pFileInfo *fi) {
-    *di = (pDirInfo)malloc(sizeof(DirInfo));
-    *fi = (pFileInfo)malloc(sizeof(FileInfo));
-    if (*di == NULL) {
+void init_dir_file_info(pDirInfo *dir_info, pFileInfo *file_info) {
+    *dir_info = (pDirInfo)malloc(sizeof(DirInfo));
+    *file_info = (pFileInfo)malloc(sizeof(FileInfo));
+    if (*dir_info == NULL) {
         printf("Memory allocation failed for di\n");
         exit(1);
     }
-    if (*fi == NULL) {
+    if (*file_info == NULL) {
         printf("Memory allocation failed for fi\n");
         exit(1);
     }
-    memset(*di, 0, sizeof(DirInfo));
-    memset(*fi, 0, sizeof(FileInfo));
+    memset(*dir_info, 0, sizeof(DirInfo));
+    memset(*file_info, 0, sizeof(FileInfo));
 }
 
 void check_argument_count(int argc) {
@@ -90,18 +90,18 @@ void check_argument_count(int argc) {
     }
 }
 
-void open_src_dir(pDirInfo di, const char *dname) {
-    di->dirent = opendir(dname);
-    if (di->dirent == NULL) {
+void open_src_dir(pDirInfo dir_info, const char *dname) {
+    dir_info->dirent = opendir(dname);
+    if (dir_info->dirent == NULL) {
         perror("open dir");
         exit(1);
     }
 }
 
-bool read_src_dir(pDirInfo di) {
+bool read_src_dir(pDirInfo dir_info) {
     errno = 0;  // 에러 초기화
-    di->entry = readdir(di->dirent);
-    if (di->entry == NULL) {
+    dir_info->entry = readdir(dir_info->dirent);
+    if (dir_info->entry == NULL) {
         if (errno != 0) {
             perror("read dir");
             exit(1);
@@ -111,34 +111,34 @@ bool read_src_dir(pDirInfo di) {
     return true;
 }
 
-void open_output_file(pFileInfo fi, const char *fpath, int oflags, mode_t mode) {
-    fi->output_fd = open(fpath, oflags, mode);
-    if (fi->output_fd == -1) {
+void open_output_file(pFileInfo file_info, const char *fpath, int oflags, mode_t mode) {
+    file_info->output_fd = open(fpath, oflags, mode);
+    if (file_info->output_fd == -1) {
         perror("open file");
         exit(1);
     }
 }
 
-void open_src_file(pFileInfo fi, int oflags, mode_t mode) {
-    fi->src_fd = open(fi->path, oflags, mode);
-    if (fi->src_fd == -1) {
+void open_src_file(pFileInfo file_info, int oflags, mode_t mode) {
+    file_info->src_fd = open(file_info->path, oflags, mode);
+    if (file_info->src_fd == -1) {
         perror("open file");
         exit(1);
     }
 }
 
-bool read_src_file(pFileInfo fi) {
-    fi->bytes_read = read(fi->src_fd, fi->io_buffer, sizeof(fi->io_buffer));
-    if (fi->bytes_read == -1) {
+bool read_src_file(pFileInfo file_info) {
+    file_info->bytes_read = read(file_info->src_fd, file_info->io_buffer, sizeof(file_info->io_buffer));
+    if (file_info->bytes_read == -1) {
         perror("read file");
         exit(1);
     }
-    return fi->bytes_read > 0;
+    return file_info->bytes_read > 0;
 }
 
-void write_output_file(pFileInfo fi) {
-    if (fi->io_buffer[0] == ' ') return;
-    ssize_t written = write(fi->output_fd, fi->io_buffer, fi->bytes_read);
+void write_output_file(pFileInfo file_info) {
+    if (file_info->io_buffer[0] == ' ') return;
+    ssize_t written = write(file_info->output_fd, file_info->io_buffer, file_info->bytes_read);
     if (written == -1) {
         perror("write file");
         exit(1);
