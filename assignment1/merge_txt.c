@@ -12,7 +12,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#define CREAT_O_FLAG
+#define BUFFER_SIZE 1
 #define FILE_MODE 0644
 
 // #pragma pack(push, 1)
@@ -25,7 +25,7 @@ typedef struct FileInfo {
     char path[PATH_MAX];
     int src_fd;
     int output_fd;
-    char io_buffer[1];
+    char io_buffer[BUFFER_SIZE];
     ssize_t bytes_read;
 } FileInfo, *pFileInfo;
 // #pragma pack(pop)
