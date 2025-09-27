@@ -181,6 +181,27 @@ bool read_src_file(pAppContext ctx) {
     return file_info->bytes_read > 0;
 }
 
+// void write_output_file(pAppContext ctx) {
+//     pFileInfo file_info = ctx->file_info;
+//
+//     // 공백 문자는 출력하지 않음
+//     if (file_info->io_buffer[0] == ' ')
+//         return;
+//
+//     ssize_t total_written = 0;
+//     while (total_written < file_info->bytes_read) {
+//         ssize_t written = write(file_info->output_fd, file_info->io_buffer + total_written, file_info->bytes_read - total_written);
+//
+//         if (written == -1) {
+//             perror("write file");
+//             cleanup(ctx);
+//             exit(EXIT_FAILURE);
+//         }
+//
+//         total_written += written;
+//     }
+// }
+
 void write_output_file(pAppContext ctx) {
     pFileInfo file_info = ctx->file_info;
 
@@ -188,17 +209,12 @@ void write_output_file(pAppContext ctx) {
     if (file_info->io_buffer[0] == ' ')
         return;
 
-    ssize_t total_written = 0;
-    while (total_written < file_info->bytes_read) {
-        ssize_t written = write(file_info->output_fd, file_info->io_buffer + total_written, file_info->bytes_read - total_written);
+    ssize_t written = write(file_info->output_fd, file_info->io_buffer, file_info->bytes_read);
 
-        if (written == -1) {
-            perror("write file");
-            cleanup(ctx);
-            exit(EXIT_FAILURE);
-        }
-
-        total_written += written;
+    if (written == -1) {
+        perror("write file");
+        cleanup(ctx);
+        exit(EXIT_FAILURE);
     }
 }
 
