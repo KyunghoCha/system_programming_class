@@ -22,4 +22,5 @@ add_executable(_idea
         ../assignment2/link.c
         ../assignment2/unlink.c
         ../assignment2/slink.c
-        ../assignment2/rlink.c)
+        ../assignment2/rlink.c
+        ../assignment1/merge_txt.c)
