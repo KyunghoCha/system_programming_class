@@ -47,6 +47,7 @@ bool read_src_file(pAppContext);
 void write_output_file(pAppContext);
 void close_src_file(pAppContext);
 bool is_not_text_file(const char *);
+void error_porc(pAppContext, const char *);
 void cleanup(pAppContext);
 
 int main(const int argc, char *argv[]) {
@@ -105,20 +106,16 @@ void init_dir_file_info(pAppContext *ctx) {
 
 void check_argument_count(int argc) {
     if (argc != 3) {
-        printf("Usage: merge_txt <source_directory> <output_file>\n");
+        fprintf(stderr, "Usage: merge_txt <directory> <file>\n");
         exit(EXIT_FAILURE);
     }
 }
 
-void open_src_dir(pAppContext ctx, const char *dname) {
+void open_src_dir(pAppContext ctx, const char *d_name) {
     pDirInfo dir_info = ctx->dir_info;
 
-    dir_info->dirent = opendir(dname);
-    if (dir_info->dirent == NULL) {
-        perror("open dir");
-        cleanup(ctx);
-        exit(EXIT_FAILURE);
-    }
+    dir_info->dirent = opendir(d_name);
+    if (dir_info->dirent == NULL) error_porc(ctx, "open dir");
 }
 
 bool read_src_dir(pAppContext ctx) {
@@ -127,21 +124,17 @@ bool read_src_dir(pAppContext ctx) {
     errno = 0;  // 에러 초기화
     dir_info->entry = readdir(dir_info->dirent);
     if (dir_info->entry == NULL) {
-        if (errno != 0) {
-            perror("read dir");
-            cleanup(ctx);
-            exit(EXIT_FAILURE);
-        }
+        if (errno != 0) error_porc(ctx, "read dir");
         return false;  // 정상적으로 디렉터리 끝 도달
     }
     return true;
 }
 
-bool build_file_path(pAppContext ctx, const char *dname) {
+bool build_file_path(pAppContext ctx, const char *d_name) {
     pDirInfo dir_info = ctx->dir_info;
 
-    if (snprintf(ctx->file_info->path, PATH_MAX, "%s/%s", dname, dir_info->entry->d_name) >= PATH_MAX) {
-        fprintf(stderr, "Path too long: %s/%s\n", dname, dir_info->entry->d_name);
+    if (snprintf(ctx->file_info->path, PATH_MAX, "%s/%s", d_name, dir_info->entry->d_name) >= PATH_MAX) {
+        fprintf(stderr, "Path too long: %s/%s\n", d_name, dir_info->entry->d_name);
         return false;
     }
     return true;
@@ -151,33 +144,21 @@ void open_output_file(pAppContext ctx, const char *fpath, int oflags, mode_t mod
     pFileInfo file_info = ctx->file_info;
 
     file_info->output_fd = open(fpath, oflags, mode);
-    if (file_info->output_fd == -1) {
-        perror("open file");
-        cleanup(ctx);
-        exit(EXIT_FAILURE);
-    }
+    if (file_info->output_fd == -1) error_porc(ctx, "open output file");
 }
 
 void open_src_file(pAppContext ctx, int oflags, mode_t mode) {
     pFileInfo file_info = ctx->file_info;
 
     file_info->src_fd = open(file_info->path, oflags, mode);
-    if (file_info->src_fd == -1) {
-        perror("open file");
-        cleanup(ctx);
-        exit(EXIT_FAILURE);
-    }
+    if (file_info->src_fd == -1) error_porc(ctx, "open src file");
 }
 
 bool read_src_file(pAppContext ctx) {
     pFileInfo file_info = ctx->file_info;
 
     file_info->bytes_read = read(file_info->src_fd, file_info->io_buffer, sizeof(file_info->io_buffer));
-    if (file_info->bytes_read == -1) {
-        perror("read file");
-        cleanup(ctx);
-        exit(EXIT_FAILURE);
-    }
+    if (file_info->bytes_read == -1) error_porc(ctx, "read src file");
     return file_info->bytes_read > 0;
 }
 
@@ -211,21 +192,14 @@ void write_output_file(pAppContext ctx) {
 
     ssize_t written = write(file_info->output_fd, file_info->io_buffer, file_info->bytes_read);
 
-    if (written == -1) {
-        perror("write file");
-        cleanup(ctx);
-        exit(EXIT_FAILURE);
-    }
+    if (written == -1) error_porc(ctx, "write output file");
 }
 
 void close_src_file(pAppContext ctx) {
     pFileInfo file_info = ctx->file_info;
 
-    if (close(ctx->file_info->src_fd) == -1) {
-        perror("close");
-        cleanup(ctx);
-        exit(EXIT_FAILURE);
-    }
+    if (close(file_info->src_fd) == -1) error_porc(ctx, "close src file");
+    file_info->src_fd = -1;
 }
 
 bool is_not_text_file(const char *fname) {
@@ -233,6 +207,12 @@ bool is_not_text_file(const char *fname) {
     if (len < 4) return true;
     const char *ext = fname + len - 4;
     return strcasecmp(ext, ".txt") != 0;
+}
+
+void error_porc(pAppContext ctx, const char * error_message) {
+    perror(error_message);
+    cleanup(ctx);
+    exit(EXIT_FAILURE);
 }
 
 void cleanup(pAppContext ctx) {
