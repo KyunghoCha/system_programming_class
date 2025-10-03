@@ -60,7 +60,7 @@ int main(const int argc, char *argv[]) {
     open_output_file(ctx, argv[2], O_WRONLY | O_CREAT | O_TRUNC, FILE_MODE);
 
     while (read_src_dir(ctx)) {
-        if (strcmp(ctx->dir_info->entry->d_name, ".") == 0 ||
+        if (strcmp(ctx->dir_info->entry->d_name, ".")  == 0 ||
             strcmp(ctx->dir_info->entry->d_name, "..") == 0) continue;
         if (is_not_text_file(ctx->dir_info->entry->d_name)) continue;
         if (!build_file_path(ctx, argv[1])) continue;
@@ -165,19 +165,11 @@ bool read_src_file(pAppContext ctx) {
 // void write_output_file(pAppContext ctx) {
 //     pFileInfo file_info = ctx->file_info;
 //
-//     // 공백 문자는 출력하지 않음
-//     if (file_info->io_buffer[0] == ' ')
-//         return;
-//
 //     ssize_t total_written = 0;
 //     while (total_written < file_info->bytes_read) {
 //         ssize_t written = write(file_info->output_fd, file_info->io_buffer + total_written, file_info->bytes_read - total_written);
 //
-//         if (written == -1) {
-//             perror("write file");
-//             cleanup(ctx);
-//             exit(EXIT_FAILURE);
-//         }
+//         if (written == -1) error_porc(ctx, "write output file");
 //
 //         total_written += written;
 //     }
