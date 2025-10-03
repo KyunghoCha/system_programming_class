@@ -7,7 +7,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     int pid;
 
     // 1단계: 기본 정보 출력
