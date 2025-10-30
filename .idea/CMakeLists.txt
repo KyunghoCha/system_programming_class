@@ -23,4 +23,7 @@ add_executable(_idea
         ../assignment2/unlink.c
         ../assignment2/slink.c
         ../assignment2/rlink.c
-        ../assignment3/myprocess.c)
+        ../assignment3/myprocess.c
+        ../assignment4/pipe1.c
+        ../assignment4/file_processor_svr.c
+        ../assignment4/file_processor_clnt.c)

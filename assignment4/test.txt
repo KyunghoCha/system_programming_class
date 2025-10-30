@@ -1,0 +1,9 @@
+The quick brown fox jumps over the lazy dog.
+hello world.
+count me.
+A B C D E
+ThisLineIsMuchLongerThanTheOthersAndItTestsBufferOverflowScenariosIfTheBufferIsSmallButSinceOurBufferIsAround4KBItsMoreLikelyToTestGeneralReadLogicConsistencyAcrossMultipleSystemCalls.
+!@#$%^&*()_+-=
+1234567890
+mixed CaSe And SpAces
+DONE
