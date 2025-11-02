@@ -2,165 +2,307 @@
 // Created by gcha792 on 10/30/25.
 //
 
-// 1. C 표준 라이브러리 (알파벳 순서 권장)
-#include <stdarg.h>    // 가변 인자 처리 (handle_error 함수용)
-#include <stdio.h>     // 표준 입출력 (printf, perror 등)
-#include <stdlib.h>    // 일반 유틸리티 (malloc, free, exit 등)
-#include <stdint.h>    // uint32_t, size_t 등
-#include <string.h>    // 문자열 처리 (strlen, memcpy 등)
-#include <errno.h>     // EINTR 커널 인터럽트 처리
-#include <arpa/inet.h> // htonl, ntohl 등
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <errno.h>
+#include <time.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <arpa/inet.h>
 
-// 2. POSIX/UNIX 시스템 인터페이스
-#include <unistd.h>   // UNIX 표준 함수 (read, write, close)
-#include <fcntl.h>    // 파일 제어 (open 플래그, fcntl)
+#define MODE_NUM 4
+#define BUFFER_SIZE 8192
 
-#define MODE_NUM 4        // 모드 갯수
-#define BUFFER_SIZE 8192  // 읽기, 쓰기 버퍼 크기
-
-// 통신 프로토콜 헤더
 typedef struct {
-    int total_lines;
-} MessageHeader, *pMessageHeader;
+    uint32_t line_bytes;
+} MessageHeader;
 
-// 통계 구조체
 typedef struct {
     char *mode;
-    int total_lines;
-    int times; // TODO 이름 변경
-} Stats, *pStats;
+    int total_proc_lines;
+    double elapsed_time;
+} Stats;
 
-int resolve_mode(const char *);                // 모드 옵션 처리
-ssize_t read_all(int, void *, size_t);         // 읽기 무결성 보장
-ssize_t write_all(int, const void *, size_t);  // 쓰기 무결성 보장
-int send_message(int, const MessageHeader *, const char *, size_t);  // 서버로 데이터 전송
-char *receive_message(int, const MessageHeader *, size_t *);         // 서버에서 받은 데이터 읽기
-char *read_line(int, size_t *);        // 한번에 읽은 파일 줄로 분리 및 처리
-void print_stats(const Stats *);       // 통계 출력
-void handle_error(const char *, ...);  // 에러 처리
+int resolve_mode(const char *);
+ssize_t read_all(int, void *, size_t);
+ssize_t write_all(int, const void *, size_t);
+int send_message(int, const MessageHeader *, const char *, size_t);
+char *receive_message(int, MessageHeader *, size_t *);
+char *read_line(int, size_t *);
+void print_stats(const Stats *);
+void handle_error(const char *, ...);
 
 int main(int argc, char *argv[]) {
-    // 사용자 입력 인자 갯수 확인
-    if (argc != 3) handle_error("Usage: file_processor_clnt <input_file> <mode>\n");
+    if (argc != 3) {
+        handle_error("Usage: %s <input_file> <mode>\n", argv[0]);
+    }
 
-    int fd_input = open(argv[1], O_RDONLY);              // 사용자 지정 파일 열기
-    int fd_c2s = open("./fifo/fifo_c2s", O_WRONLY);  // fifo_c2s 파일 쓰기 전용 열기
-    int fd_s2c = open("./fifo/fifo_s2c", O_RDONLY);  // fifo_s2c 파일 읽기 전용 열기
-    if (fd_input == -1 || fd_c2s == -1 || fd_s2c == -1)       // input, fifo 파일 열기 실패 예외 처리
-        handle_error("Fail to open FIFO.\n");
+    // FIFO 생성
+    mkfifo("./fifo/fifo_c2s", 0666);
+    mkfifo("./fifo/fifo_s2c", 0666);
 
-    char write_buf[BUFFER_SIZE];  // 송신 버퍼
-    char line_buf[BUFFER_SIZE];   // 한 줄 처리용 송신 임시 버퍼
-    char read_buf[BUFFER_SIZE];   // 수신 버퍼
+    int fd_input = open(argv[1], O_RDONLY);
+    if (fd_input == -1) {
+        handle_error("Error: Cannot open input file '%s'\n", argv[1]);
+    }
 
-    int curr_mode = resolve_mode(argv[2]);  // 현재 모드 처리
-    snprintf(write_buf, sizeof(curr_mode), "%d\n", curr_mode);  // 현재 모드 쓰기 버퍼에 저장
+    int fd_c2s = open("./fifo/fifo_c2s", O_WRONLY);
+    int fd_s2c = open("./fifo/fifo_s2c", O_RDONLY);
+    if (fd_c2s == -1 || fd_s2c == -1) {
+        close(fd_input);
+        handle_error("Error: Cannot open FIFO files\n");
+    }
 
-    if (write(fd_c2s, write_buf, strlen(write_buf)) == -1)  // 현재 모드 서버로 전송
-        handle_error("Fail to write to FIFO.\n");         // 전송 실패 예외처리
+    int curr_mode = resolve_mode(argv[2]);
+    char *mode_names[] = {"count", "upper", "lower", "reverse"};
 
-    do {
-        // Input file의 내용을 한 줄씩 읽기
-        ssize_t byte_read = read(fd_input, write_buf, BUFFER_SIZE);
-        if (byte_read == -1) handle_error("Fail to read from Input File.\n");
+    // 모드 전송
+    MessageHeader mode_header = {sizeof(int)};
+    if (send_message(fd_c2s, &mode_header, (char *)&curr_mode, sizeof(int)) == -1) {
+        handle_error("Error: Failed to send mode\n");
+    }
 
-        // 읽은 내용을 fifo_c2s 파일에 작성
-        ssize_t bytes_write = write(fd_c2s, write_buf, sizeof(write_buf));  // 읽은 파일의 내용 한 줄씩 서버에 보내기
-        if (bytes_write == -1) handle_error("Fail to write to FIFO.\n");  // 예외 처리
+    Stats stats = {
+        .mode = mode_names[curr_mode],
+        .total_proc_lines = 0,
+        .elapsed_time = 0.0
+    };
 
-        // 서버 프로세스에서 처리된 fifo_s2c 파일 읽기
-        ssize_t bytes_written = read(fd_s2c, read_buf, BUFFER_SIZE);       // 서버의 결과 읽기
-        if (bytes_written == -1) handle_error("Fail to read from FIFO.\n");  // 예외 처리
-        read_buf[bytes_written] = '\0';      // 레코드 끝에 null 문자를 추가해 문자열 비교 함수 보장
-    } while (strcmp(read_buf, "END") != 0);  // 파일을 다 보내거나 END가 오기 전까지 계속 반복
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    char *line;
+    size_t line_len;
+    int line_num = 1;
+
+    // 파일을 한 줄씩 읽어서 처리
+    while ((line = read_line(fd_input, &line_len)) != NULL) {
+        printf("  %d번째 줄 전송...\n", line_num);
+
+        // 줄 전송
+        MessageHeader header = {line_len};
+        if (send_message(fd_c2s, &header, line, line_len) == -1) {
+            free(line);
+            handle_error("Error: Failed to send line\n");
+        }
+        free(line);
+
+        // 결과 수신
+        MessageHeader recv_header;
+        size_t recv_len;
+        char *result = receive_message(fd_s2c, &recv_header, &recv_len);
+        if (result == NULL) {
+            handle_error("Error: Failed to receive result\n");
+        }
+
+        printf("  %d번째 줄 결과 수신: %s", line_num, result);
+        if (result[recv_len - 1] != '\n') {
+            printf("\n");
+        }
+
+        free(result);
+        stats.total_proc_lines++;
+        line_num++;
+    }
+
+    // END 메시지 전송
+    const char *end_msg = "END";
+    MessageHeader end_header = {strlen(end_msg)};
+    send_message(fd_c2s, &end_header, end_msg, strlen(end_msg));
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    stats.elapsed_time = (end.tv_sec - start.tv_sec) +
+                        (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    print_stats(&stats);
+
+    close(fd_input);
+    close(fd_c2s);
+    close(fd_s2c);
 
     return 0;
 }
 
-// 모드 옵션 처리
 int resolve_mode(const char *mode) {
-    int curr_mode = MODE_NUM;
-    char *mode_name[] = { "count", "upper", "lower", "reverse" };
+    char *mode_names[] = {"count", "upper", "lower", "reverse"};
 
-    for (int i = 0; i < MODE_NUM; i++)
-        if (strcmp(mode, mode_name[i]) == 0) {
-            curr_mode = i;
-            break;
+    for (int i = 0; i < MODE_NUM; i++) {
+        if (strcmp(mode, mode_names[i]) == 0) {
+            return i;
         }
+    }
 
-    if (curr_mode == MODE_NUM)
-        handle_error("Error: Invalid mode '%s'. Valid modes are: count, upper, lower, reverse.\n", mode);
-
-    return curr_mode;
+    handle_error("Error: Invalid mode '%s'. Valid modes are: count, upper, lower, reverse.\n", mode);
+    return -1;
 }
 
 ssize_t read_all(int fd, void *buf, size_t count) {
-    size_t bytes_left = count;    // 읽을 바이트
-    ssize_t current_read = 0;     // 현재 읽은 바이트
-    char *buf_ptr = (char *)buf;  // 파일 포인터 위치
+    size_t bytes_left = count;
+    ssize_t current_read = 0;
+    char *buf_ptr = (char *)buf;
 
-    while (bytes_left > 0) {  // 다 읽을때 까지 반복
-        if ((current_read = read(fd, buf_ptr, bytes_left)) == -1) {  // 파일 읽기
-            if (errno == EINTR) continue;  // 커널 인터럽트시 재시도
-
-            return -1;  // 이외 심각한 오류
+    while (bytes_left > 0) {
+        current_read = read(fd, buf_ptr, bytes_left);
+        if (current_read == -1) {
+            if (errno == EINTR) continue;
+            return -1;
         }
+        if (current_read == 0) break;
 
-        if (current_read == 0) break;  // 파일을 다 읽었다면
-
-        bytes_left -= current_read;  // 남은 읽을 바이트
-        buf_ptr += current_read;     // 파일 포인터 이동
+        bytes_left -= current_read;
+        buf_ptr += current_read;
     }
 
-    return (ssize_t)(count - bytes_left);  // 읽은 바이트 반환
+    return (ssize_t)(count - bytes_left);
 }
 
 ssize_t write_all(int fd, const void *buf, size_t count) {
-    size_t bytes_left = count;    // 쓸 바이트
-    ssize_t current_write = 0;    // 현재 쓴 바이트
-    char *buf_ptr = (char *)buf;  // 파일 포인터 위치
+    size_t bytes_left = count;
+    ssize_t current_write = 0;
+    const char *buf_ptr = (const char *)buf;
 
-    while (bytes_left > 0) {  // 다 쓸때까지 반복
-        if ((current_write = write(fd, buf_ptr, bytes_left)) == -1) {  // 파일 쓰기
-            if (errno == EINTR) continue;  // 커널 인터럽스시 재시도
-
-            return -1;  // 이외 심각한 오류
+    while (bytes_left > 0) {
+        current_write = write(fd, buf_ptr, bytes_left);
+        if (current_write == -1) {
+            if (errno == EINTR) continue;
+            return -1;
         }
 
-        bytes_left -= current_write;  // 남은 쓸 바이트
-        buf_ptr += current_write;     // 파일 포인터 이동
+        bytes_left -= current_write;
+        buf_ptr += current_write;
     }
 
-    return (ssize_t)(count - bytes_left);  // 쓴 바이트 반환
+    return (ssize_t)(count - bytes_left);
 }
 
 int send_message(int fd, const MessageHeader *header, const char *data, size_t len) {
-    uint32_t net_length = htonl(header->total_lines);
+    uint32_t net_length = htonl(header->line_bytes);
     if (write_all(fd, &net_length, sizeof(net_length)) == -1) return -1;
-    if (write_all(fd, (char *)data, len) == -1) return -1;
+    if (write_all(fd, data, len) == -1) return -1;
     return 0;
 }
 
-char *receive_message(int fd, const MessageHeader *header, size_t *out_len) {
+char *receive_message(int fd, MessageHeader *header, size_t *out_len) {
+    uint32_t net_length = 0;
 
+    if (read_all(fd, &net_length, sizeof(net_length)) == -1) {
+        return NULL;
+    }
+
+    uint32_t msg_length = ntohl(net_length);
+
+    char *data = (char *)malloc(msg_length + 1);
+    if (data == NULL) return NULL;
+
+    if (read_all(fd, data, msg_length) != (ssize_t)msg_length) {
+        free(data);
+        return NULL;
+    }
+
+    if (out_len != NULL) *out_len = msg_length;
+
+    header->line_bytes = msg_length;
+    data[msg_length] = '\0';
+
+    return data;
 }
 
 char *read_line(int fd, size_t *out_len) {
+    static char *stash = NULL;
+    static size_t stash_len = 0;
 
+    char read_buf[BUFFER_SIZE];
+    char *line = NULL;
+    char *newline_pos = NULL;
+    ssize_t bytes_read;
+
+    if (stash == NULL) {
+        stash = malloc(1);
+        if (!stash) return NULL;
+        stash[0] = '\0';
+        stash_len = 0;
+    }
+
+    while (1) {
+        newline_pos = memchr(stash, '\n', stash_len);
+
+        if (newline_pos != NULL) {
+            size_t line_len = newline_pos - stash;
+            line = malloc(line_len + 2);
+            if (!line) goto error;
+
+            memcpy(line, stash, line_len + 1);
+            line[line_len + 1] = '\0';
+
+            size_t remaining = stash_len - line_len - 1;
+            memmove(stash, newline_pos + 1, remaining);
+            stash_len = remaining;
+            stash[stash_len] = '\0';
+
+            if (out_len) *out_len = line_len + 1;
+            return line;
+        }
+
+        bytes_read = read(fd, read_buf, BUFFER_SIZE);
+
+        if (bytes_read == -1) {
+            if (errno == EINTR) continue;
+            goto error;
+        }
+
+        if (bytes_read == 0) {
+            if (stash_len == 0) {
+                free(stash);
+                stash = NULL;
+                return NULL;
+            }
+
+            line = malloc(stash_len + 1);
+            if (!line) goto error;
+
+            memcpy(line, stash, stash_len);
+            line[stash_len] = '\0';
+
+            if (out_len) *out_len = stash_len;
+
+            free(stash);
+            stash = NULL;
+            stash_len = 0;
+            return line;
+        }
+
+        char *new_stash = realloc(stash, stash_len + bytes_read + 1);
+        if (!new_stash) goto error;
+
+        stash = new_stash;
+        memcpy(stash + stash_len, read_buf, bytes_read);
+        stash_len += bytes_read;
+        stash[stash_len] = '\0';
+    }
+
+error:
+    free(line);
+    free(stash);
+    stash = NULL;
+    stash_len = 0;
+    return NULL;
 }
 
 void print_stats(const Stats *stats) {
-
+    printf("\n  === 처리 통계 ===\n");
+    printf("  처리 모드: %s\n", stats->mode);
+    printf("  처리한 줄 수: %d줄\n", stats->total_proc_lines);
+    printf("  소요 시간: %.2f초\n", stats->elapsed_time);
 }
 
-// 에러 처리
-void handle_error(const char *fmt, ...) {  // 가변인자로 포메팅 지원
+void handle_error(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-
-    // stderr로 출력
     vfprintf(stderr, fmt, args);
-
     va_end(args);
     exit(EXIT_FAILURE);
 }

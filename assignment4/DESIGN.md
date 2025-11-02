@@ -17,10 +17,10 @@
 
 | 분류 | 역할 (Purpose) | 함수명 (Function Signature) | 설명 (Description) |
 | :--- | :--- | :--- | :--- |
-| **I/O 공통** | 읽기 보장 | `ssize_t read_all(int fd, void *buf, size_t count)` | 클라이언트의 요청을 안정적으로 받기 위해 사용. |
-| | 쓰기 보장 | `ssize_t write_all(int fd, const void *buf, size_t count)` | 클라이언트에게 결과를 안정적으로 보내기 위해 사용. |
-| **프로토콜** | 메시지 수신 (언패킹) | `char* receive_message(int fd, size_t *out_len)` | `read_all`로 헤더와 본문을 정확히 읽어 클라이언트 요청 수신. |
-| | 메시지 전송 (패킹) | `int send_message(int fd, const char *data, size_t len)` | 결과 메시지를 **길이 헤더**와 **본문**으로 순차 전송. |
+| **I/O 공통** | 읽기 보장 | `ssize_t read_all(int fd, void *buf, size_t count)` | 요청한 **모든 바이트**를 읽을 때까지 `read()` 반복. 클라이언트 요청 수신에 사용. |
+| | 쓰기 보장 | `ssize_t write_all(int fd, const void *buf, size_t count)` | 요청한 **모든 바이트**를 쓸 때까지 `write()` 반복. 클라이언트에게 결과 전송에 사용. |
+| **프로토콜** | 메시지 수신 (언패킹) | `char* receive_message(int fd, MessageHeader *header, size_t *out_len)` | `read_all`로 헤더와 본문을 정확히 읽어 클라이언트 요청 수신. |
+| | 메시지 전송 (패킹) | `int send_message(int fd, const MessageHeader *header, const char *data, size_t len)` | 메시지 **길이 헤더**와 **본문**을 `write_all`로 순차 전송. |
 | **처리 로직** | 명령어 처리 | `char* process_line(const char *line, const char *mode)` | 수신된 `mode`에 따라 하위 처리 함수를 호출하는 **핵심 분기** 함수. |
 | | 단어 수 계산 | `char* count_words(const char *str)` | 문자 수와 단어 수를 계산하여 결과 문자열을 생성. |
 | | 대문자 변환 | `char* to_upper(const char *str)` | 문자열의 모든 소문자를 대문자로 변환하여 반환. |
