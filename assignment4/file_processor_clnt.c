@@ -16,7 +16,6 @@
 #include <unistd.h>     // UNIX 표준 함수 (read, write, close)
 #include <fcntl.h>      // 파일 제어 (open 플래그, fcntl)
 
-#define MODE_NUM 4        // 모드 갯수
 #define BUFFER_SIZE 4096  // 읽기, 쓰기 버퍼 크기
 #define READ_LINE_CLEANUP -1  //
 
@@ -43,6 +42,15 @@ typedef struct {
     size_t stash_size;
 } rn_fd_t, *p_rn_fd_t;
 
+// 모드 열거형
+enum Mode {
+    COUNT,
+    UPPER,
+    LOWER,
+    REVERSE,
+    MODE_NUM
+};
+
 uint32_t resolve_mode(const char *);                             // 모드 옵션 처리
 ssize_t read_all(int, void *, size_t);                           // 읽기 무결성 보장
 ssize_t write_all(int, const void *, size_t);                    // 쓰기 무결성 보장
@@ -65,12 +73,12 @@ int main(int argc, char *argv[]) {
 
     MessageHeader header = { .line_bytes=0 };
     Stats stats = { .mode=NULL, .total_proc_lines=0, .elapsed_time=0.0 };
-    uint32_t mode = UINT32_MAX;     // 모드를 초기화
+    uint32_t mode = MODE_NUM;     // 모드를 초기화
     char *line = NULL;      // 한 줄 처리용 송신 임시 버퍼
     char *read_buf = NULL;  // 수신 버퍼
     if ((read_buf = (char *)malloc(1)) == NULL) handle_error("Fail to allocate memory.\n");
 
-    if ((mode = resolve_mode(argv[2])) == UINT32_MAX)  // 현재 모드 처리
+    if ((mode = resolve_mode(argv[2])) == MODE_NUM)  // 현재 모드 처리
         handle_error("Error: Invalid mode '%s'. Valid modes are: count, upper, lower, reverse.\n", argv[2]);
 
     header.line_bytes = sizeof(mode);
@@ -133,7 +141,7 @@ uint32_t resolve_mode(const char *mode) {
         }
 
     if (curr_mode == MODE_NUM)
-        return -1;
+        return MODE_NUM;
 
     return curr_mode;
 }
