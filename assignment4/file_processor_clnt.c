@@ -65,12 +65,12 @@ int main(int argc, char *argv[]) {
 
     MessageHeader header = { .line_bytes=0 };
     Stats stats = { .mode=NULL, .total_proc_lines=0, .elapsed_time=0.0 };
-    uint32_t mode = -1;     // 모드를 정수로 변환 -1로 초기화
+    uint32_t mode = UINT32_MAX;     // 모드를 초기화
     char *line = NULL;      // 한 줄 처리용 송신 임시 버퍼
     char *read_buf = NULL;  // 수신 버퍼
     if ((read_buf = (char *)malloc(1)) == NULL) handle_error("Fail to allocate memory.\n");
 
-    if ((mode = resolve_mode(argv[2])) == -1)  // 현재 모드 처리
+    if ((mode = resolve_mode(argv[2])) == UINT32_MAX)  // 현재 모드 처리
         handle_error("Error: Invalid mode '%s'. Valid modes are: count, upper, lower, reverse.\n", argv[2]);
 
     header.line_bytes = sizeof(mode);
