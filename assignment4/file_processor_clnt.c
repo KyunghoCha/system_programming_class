@@ -16,39 +16,36 @@
 #include <unistd.h>     // UNIX 표준 함수 (read, write, close)
 #include <fcntl.h>      // 파일 제어 (open 플래그, fcntl)
 
-#define BUFFER_SIZE 4096  // 읽기, 쓰기 버퍼 크기
-#define READ_LINE_CLEANUP -1  //
-
-// 시간 측정 구조체
-struct timespec start_time, end_time;
+#define BUFFER_SIZE       4096  // 읽기, 쓰기 버퍼 크기
+#define READ_LINE_CLEANUP -1    // read_line 클린업 모드
 
 // 프로토콜 헤더 구조체
 typedef struct {
-    uint32_t line_bytes;
+    uint32_t line_bytes;  // 보내고 받을 줄의 크기
 } MessageHeader, *pMessageHeader;
 
 // 통계 구조체
 typedef struct {
-    char *mode;
-    size_t total_proc_lines;
-    double elapsed_time;
+    char *mode;               // 처리 모드
+    size_t total_proc_lines;  // 총 처리한 줄의 수
+    double elapsed_time;      // 처리 시간
 } Stats, *pStats;
 
 // 파일 구조체
 typedef struct {
-    int fd;
-    char *stash_buf;
-    size_t stash_len;
-    size_t stash_size;
+    int fd;             // 파일 디스크립터
+    char *stash_buf;    // 임시 저장 버퍼
+    size_t stash_len;   // 입시 저장 버퍼 길이
+    size_t stash_size;  // 임시 저장 버퍼 메모리 크기
 } rn_fd_t, *p_rn_fd_t;
 
 // 모드 열거형
 enum Mode {
-    COUNT,
-    UPPER,
-    LOWER,
-    REVERSE,
-    MODE_NUM
+    COUNT,    // 글자 및 단어 개수 세기
+    UPPER,    // 대문자로 변환
+    LOWER,    // 소문자로 변환
+    REVERSE,  // 반대로 출력
+    MODE_NUM  // 모드 갯수
 };
 
 uint32_t resolve_mode(const char *);                             // 모드 옵션 처리
@@ -71,34 +68,40 @@ int main(int argc, char *argv[]) {
     if (fd_c2s == -1) handle_error("Fail to open FIFO c2s\n");
     if (fd_s2c == -1) handle_error("Fail to open FIFO s2c\n");
 
+    // 시간 측정 구조체
+    struct timespec start_time, end_time;
     MessageHeader header = { .line_bytes=0 };
     Stats stats = { .mode=NULL, .total_proc_lines=0, .elapsed_time=0.0 };
-    uint32_t mode = MODE_NUM;     // 모드를 초기화
-    char *line = NULL;      // 한 줄 처리용 송신 임시 버퍼
-    char *read_buf = NULL;  // 수신 버퍼
+
+    uint32_t mode = MODE_NUM;  // 모드를 초기화
+    char *line = NULL;         // 한 줄 처리용 송신 임시 버퍼
+    char *read_buf = NULL;     // 수신 버퍼
     if ((read_buf = (char *)malloc(1)) == NULL) handle_error("Fail to allocate memory.\n");
 
     if ((mode = resolve_mode(argv[2])) == MODE_NUM)  // 현재 모드 처리
         handle_error("Error: Invalid mode '%s'. Valid modes are: count, upper, lower, reverse.\n", argv[2]);
 
     header.line_bytes = sizeof(mode);
-    if (send_message(fd_c2s, &header, &mode) == -1)
+    if (send_message(fd_c2s, &header, &mode) == -1)  // 서버에 처리 모드 전송
         handle_error("Fail to send mode: %s\n", argv[2]);
 
     size_t len = 0;
     clock_gettime(CLOCK_MONOTONIC, &start_time);  // 시간 측정 시작
     while ((line = read_line(fd_input, &len)) != NULL) {
-        stats.total_proc_lines++;
+        stats.total_proc_lines++;  // 총 처리 줄 수 증가
 
-        header.line_bytes = len;
+        // 서버에 헤더 및 데이터 송신
+        header.line_bytes = len;  // 줄의 길이 헤더에 저장
         if (send_message(fd_c2s, &header, line) == -1) handle_error("Fail to send message: %s\n", line);
-        printf("%lu번째 줄 전송...", stats.total_proc_lines);
+        printf("%lu번째 줄 전송...", stats.total_proc_lines);  // 처리 과정 출력
 
+        // 서버에서 헤더 및 데이터 수신
         if (receive_message(fd_s2c, &header, (void **)&read_buf) == -1) handle_error("Fail to receive message\n");
 
         //정보 출력
         printf("%lu번째 줄 결과 수신: %s\n", stats.total_proc_lines, read_buf);
 
+        // line 메모리 해제로 메모리 누수 방지
         free(line);
         line = NULL;
     }
@@ -108,15 +111,18 @@ int main(int argc, char *argv[]) {
     if (send_message(fd_c2s, &header, "END") == -1) handle_error("Fail to send message: %s\n", "END");
     clock_gettime(CLOCK_MONOTONIC, &end_time);  // 시간 측정 종료
 
+    // 처리 모드 및 처리 시간 저장
     stats.mode = argv[2];
     stats.elapsed_time = (end_time.tv_sec - start_time.tv_sec) * 1.0;     // 초 단위
     stats.elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1e9;  // 나노초 -> 초
 
+    // 통계 출력
     printf("=== 처리 통계 ===\n");
     printf("처리 모드: %s\n", stats.mode);
     printf("처리한 줄 수: %lu\n", stats.total_proc_lines);
     printf("소요 시간: %.2lf초\n", stats.elapsed_time);
 
+    // read_line의 메모리 정리
     read_line(READ_LINE_CLEANUP, NULL);
 
     free(line);
@@ -251,11 +257,12 @@ char *read_line(int fd, size_t *out_len) {
     char *new_line_ptr = NULL;
     ssize_t bytes_read = 0;
     size_t line_len = 0;
-    while ((new_line_ptr = memchr(stash_buf, '\n', stash_len)) == NULL) {
-        if ((bytes_read = read(fd, read_buf, BUFFER_SIZE)) == -1) goto error;
-        if (bytes_read == 0) {
-            if (stash_len == 0) return NULL;
+    while ((new_line_ptr = memchr(stash_buf, '\n', stash_len)) == NULL) {  // stash_buf에 줄이 있는지 확인
+        if ((bytes_read = read(fd, read_buf, BUFFER_SIZE)) == -1) goto error;  // 파일에서 읽기
+        if (bytes_read == 0) {  // EOF에 도달 했다면
+            if (stash_len == 0) return NULL;  // 버퍼에 남은 줄이 없다면 NULL 반환
 
+            // 남은 줄이 있다면 처리
             if ((line = (char *)malloc(stash_len + 1)) == NULL) goto error;
             memcpy(line, stash_buf, stash_len);
             line[stash_len] = '\0';
@@ -267,6 +274,7 @@ char *read_line(int fd, size_t *out_len) {
             return line;
         }
 
+        // 만약 줄이 기존 버퍼보다 크면 늘리기
         if (stash_len + bytes_read + 1 >= stash_size) {
             size_t new_size = stash_size * 2;
             char *temp_buf = realloc(stash_buf, new_size);
@@ -275,12 +283,13 @@ char *read_line(int fd, size_t *out_len) {
             stash_size = new_size;
         }
 
+        // stash_buf에 남은 데이터 이동
         memcpy(stash_buf + stash_len, read_buf, bytes_read);
         stash_len += bytes_read;
         stash_buf[stash_len] = '\0';
     }
 
-    // line 처리
+    // stash_buf에서 line 처리
     line_len = (size_t)(new_line_ptr - stash_buf);
     if ((line = (char *)malloc(line_len + 1)) == NULL) goto error;
 
@@ -294,6 +303,7 @@ char *read_line(int fd, size_t *out_len) {
 
     return line;
 
+// 에러 처리 레이블
 error:
     free(stash_buf);
     free(line);
@@ -309,7 +319,7 @@ void print_stats(const Stats *stats) {
     printf("소요 시간: %lf\n", stats->elapsed_time);
 }
 
-// 에러 처리
+// 에러 처리 및 종료
 void handle_error(const char *fmt, ...) {  // 가변인자로 포메팅 지원
     va_list args;
     va_start(args, fmt);
