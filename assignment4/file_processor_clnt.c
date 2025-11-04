@@ -215,7 +215,7 @@ ssize_t receive_message(int fd, MessageHeader *header, void **buf) {
 // 질문 리스트
 // malloc 시 타입 캐스팅?
 // free(NULL) 의미?
-// memcpy, memmove 반환값 예외 처리?
+// memcpy, memmove NULL 반환값 예외 처리?
 char *read_line(int fd, size_t *out_len) {
     static char *stash_buf = NULL;
     static size_t stash_len = 0;
@@ -234,11 +234,8 @@ char *read_line(int fd, size_t *out_len) {
 
     if (stash_buf == NULL) {
         stash_size = BUFFER_SIZE;
-        if ((stash_buf = (char *)malloc(stash_size)) == NULL) {
-            free(stash_buf);
-            stash_buf = NULL;
-            return NULL;
-        } else stash_buf[0] = '\0';
+        if ((stash_buf = (char *)malloc(stash_size)) == NULL) return NULL;
+        else stash_buf[0] = '\0';
     }
 
     char read_buf[BUFFER_SIZE] = { 0, };
@@ -252,7 +249,7 @@ char *read_line(int fd, size_t *out_len) {
             if (stash_len == 0) return NULL;
 
             if ((line = (char *)malloc(stash_len + 1)) == NULL) goto error;
-            if (memcpy(line, stash_buf, stash_len) == NULL) goto error;
+            memcpy(line, stash_buf, stash_len);
             line[stash_len] = '\0';
             if (out_len) *out_len = stash_len;
 
@@ -270,7 +267,7 @@ char *read_line(int fd, size_t *out_len) {
             stash_size = new_size;
         }
 
-        if (memcpy(stash_buf + stash_len, read_buf, bytes_read) == NULL) goto error;
+        memcpy(stash_buf + stash_len, read_buf, bytes_read);
         stash_len += bytes_read;
         stash_buf[stash_len] = '\0';
     }
@@ -279,10 +276,10 @@ char *read_line(int fd, size_t *out_len) {
     line_len = (size_t)(new_line_ptr - stash_buf);
     if ((line = (char *)malloc(line_len + 1)) == NULL) goto error;
 
-    if (memcpy(line, stash_buf, line_len) == NULL) goto error;
+    memcpy(line, stash_buf, line_len);
     line[line_len] = '\0';
 
-    if (memmove(stash_buf, stash_buf + line_len + 1, stash_len - (line_len + 1)) == NULL) goto error;
+    memmove(stash_buf, stash_buf + line_len + 1, stash_len - (line_len + 1));
     stash_len -= (line_len + 1);
 
     if (out_len != NULL) *out_len = line_len;
