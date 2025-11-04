@@ -18,6 +18,7 @@
 
 #define MODE_NUM 4        // 모드 갯수
 #define BUFFER_SIZE 4096  // 읽기, 쓰기 버퍼 크기
+#define READ_LINE_CLEANUP -1  //
 
 // 시간 측정 구조체
 struct timespec start_time, end_time;
@@ -64,7 +65,7 @@ int main(int argc, char *argv[]) {
 
     MessageHeader header = { .line_bytes=0 };
     Stats stats = { .mode=NULL, .total_proc_lines=0, .elapsed_time=0.0 };
-    uint32_t mode = -1;     //
+    uint32_t mode = -1;     // 모드를 정수로 변환 -1로 초기화
     char *line = NULL;      // 한 줄 처리용 송신 임시 버퍼
     char *read_buf = NULL;  // 수신 버퍼
     if ((read_buf = (char *)malloc(1)) == NULL) handle_error("Fail to allocate memory.\n");
@@ -94,19 +95,23 @@ int main(int argc, char *argv[]) {
         line = NULL;
     }
 
+    // 프로세스 종료 END 메시지 전송
     header.line_bytes = strlen("END");
     if (send_message(fd_c2s, &header, "END") == -1) handle_error("Fail to send message: %s\n", "END");
     clock_gettime(CLOCK_MONOTONIC, &end_time);  // 시간 측정 종료
 
     stats.mode = argv[2];
     stats.elapsed_time = (end_time.tv_sec - start_time.tv_sec) * 1.0;     // 초 단위
-    stats.elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1e9;  // 나노초 → 초
+    stats.elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1e9;  // 나노초 -> 초
 
     printf("=== 처리 통계 ===\n");
     printf("처리 모드: %s\n", stats.mode);
     printf("처리한 줄 수: %lu\n", stats.total_proc_lines);
     printf("소요 시간: %.2lf초\n", stats.elapsed_time);
 
+    read_line(READ_LINE_CLEANUP, NULL);
+
+    free(line);
     free(read_buf);
 
     close(fd_input);
@@ -216,6 +221,17 @@ char *read_line(int fd, size_t *out_len) {
     static size_t stash_len = 0;
     static size_t stash_size = BUFFER_SIZE;
 
+    // 프로세스가 끝나고 메모리 정리 (Gemini)
+    if (fd == READ_LINE_CLEANUP) {
+        if (stash_buf != NULL) {
+            free(stash_buf);
+            stash_buf = NULL;
+        }
+        stash_len = 0;
+        stash_size = 0;
+        return NULL; // 정리 후 NULL 반환
+    }
+
     if (stash_buf == NULL) {
         stash_size = BUFFER_SIZE;
         if ((stash_buf = (char *)malloc(stash_size)) == NULL) {
@@ -230,7 +246,6 @@ char *read_line(int fd, size_t *out_len) {
     char *new_line_ptr = NULL;
     ssize_t bytes_read = 0;
     size_t line_len = 0;
-
     while ((new_line_ptr = memchr(stash_buf, '\n', stash_len)) == NULL) {
         if ((bytes_read = read(fd, read_buf, BUFFER_SIZE)) == -1) goto error;
         if (bytes_read == 0) {
