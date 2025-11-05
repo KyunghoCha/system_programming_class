@@ -40,6 +40,7 @@ typedef struct {
 } rn_fd_t, *p_rn_fd_t;
 
 // 모드 열거형
+// X-Macro 대체 가능
 enum Mode {
     COUNT,    // 글자 및 단어 개수 세기
     UPPER,    // 대문자로 변환
@@ -61,12 +62,23 @@ int main(int argc, char *argv[]) {
     // 사용자 입력 인자 갯수 확인
     if (argc != 3) handle_error("Usage: file_processor_clnt <input_file> <mode>\n");
 
-    int fd_input = open(argv[1], O_RDONLY);                 // 사용자 지정 파일 열기
-    int fd_c2s = open("/tmp/fifo/fifo_c2s", O_WRONLY);  // fifo_c2s 파일 쓰기 전용 열기
-    int fd_s2c = open("/tmp/fifo/fifo_s2c", O_RDONLY);  // fifo_s2c 파일 읽기 전용 열기
+    // fifo_c2s 열기
+    int fd_c2s = open("/tmp/fifo/fifo_c2s", O_WRONLY);
+    if (fd_c2s == -1) {
+        perror("Error opening fifo_c2s");
+        handle_error("Please check if the server is running.\n");
+    }
+
+    // fifo_s2c 열기
+    int fd_s2c = open("/tmp/fifo/fifo_s2c", O_RDONLY);
+    if (fd_s2c == -1) {
+        perror("Error opening fifo_s2c");
+        handle_error("Please check if the server is running.\n");
+    }
+
+    // 사용자 지정 파일 열기
+    int fd_input = open(argv[1], O_RDONLY);
     if (fd_input == -1) handle_error("Fail to open input file: %s\n", argv[1]);
-    if (fd_c2s == -1) handle_error("Fail to open FIFO c2s\n");
-    if (fd_s2c == -1) handle_error("Fail to open FIFO s2c\n");
 
     // 시간 측정 구조체
     struct timespec start_time, end_time;
@@ -211,9 +223,9 @@ ssize_t receive_message(int fd, MessageHeader *header, void **buf) {
     if (header->line_bytes == 0) return 0;
 
     // realloc 안전 처리
-    char *temp_buf = (char *)realloc(*buf, header->line_bytes);
-    if (temp_buf == NULL) return -1;
-    *buf = temp_buf;
+    char *tmp_buf = (char *)realloc(*buf, header->line_bytes);
+    if (tmp_buf == NULL) return -1;
+    *buf = tmp_buf;
 
     if ((bytes_read = read_all(fd, *buf, header->line_bytes)) == -1) {
         free(*buf);
@@ -277,9 +289,9 @@ char *read_line(int fd, size_t *out_len) {
         // 만약 줄이 기존 버퍼보다 크면 늘리기
         if (stash_len + bytes_read + 1 >= stash_size) {
             size_t new_size = stash_size * 2;
-            char *temp_buf = realloc(stash_buf, new_size);
-            if (temp_buf == NULL) goto error;
-            stash_buf = temp_buf;
+            char *tmp_buf = realloc(stash_buf, new_size);
+            if (tmp_buf == NULL) goto error;
+            stash_buf = tmp_buf;
             stash_size = new_size;
         }
 
