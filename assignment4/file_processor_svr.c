@@ -87,9 +87,20 @@ int main(int argc, char *argv[]) {
     }
     umask(old_mask);
 
-    int fd_c2s;
-    int fd_s2c;
+    // FIFO 열기
+    int fd_c2s = open("/tmp/fifo/fifo_c2s", O_RDONLY);
+    if (fd_c2s == -1) {
+        handle_error("open: failed to open /tmp/fifo/fifo_c2s: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    int fd_s2c = open("/tmp/fifo/fifo_s2c", O_WRONLY);
+    if (fd_s2c == -1) {
+        close(fd_c2s);
+        handle_error("open: failed to open /tmp/fifo/fifo_s2c: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
+    // 초기화
     MessageHeader header = { .line_bytes = 0 };
     char *read_buf = NULL;
     char *proc_buf = NULL;
@@ -104,19 +115,6 @@ int main(int argc, char *argv[]) {
 
     // 서버 메인 루프
     while (1) {
-        // FIFO 열기
-        fd_c2s = open("/tmp/fifo/fifo_c2s", O_RDONLY);
-        if (fd_c2s == -1) {
-            handle_error("open: failed to open /tmp/fifo/fifo_c2s: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-        fd_s2c = open("/tmp/fifo/fifo_s2c", O_WRONLY);
-        if (fd_s2c == -1) {
-            close(fd_c2s);
-            handle_error("open: failed to open /tmp/fifo/fifo_s2c: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
         uint32_t mode = MODE_NUM;
         read_buf = NULL;
         proc_buf = NULL;
