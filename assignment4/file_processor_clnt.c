@@ -31,13 +31,13 @@ typedef struct {
     double elapsed_time;      // 처리 시간
 } Stats, *pStats;
 
-// 파일 구조체
+// 파일 구조체 (아직 안씀)
 typedef struct {
     int fd;             // 파일 디스크립터
     char *stash_buf;    // 임시 저장 버퍼
     size_t stash_len;   // 입시 저장 버퍼 길이
     size_t stash_size;  // 임시 저장 버퍼 메모리 크기
-} rn_fd_t, *p_rn_fd_t;
+} rn_fd_t, *p_rn_fd_t;  // 이름 통일 필요
 
 // 모드 열거형
 // X-Macro 대체 가능
@@ -62,6 +62,10 @@ int main(int argc, char *argv[]) {
     // 사용자 입력 인자 갯수 확인
     if (argc != 3) handle_error("Usage: file_processor_clnt <input_file> <mode>\n");
 
+    // 사용자 지정 파일 열기
+    int fd_input = open(argv[1], O_RDONLY);
+    if (fd_input == -1) handle_error("Fail to open input file: %s\n", argv[1]);
+
     // fifo_c2s 열기
     int fd_c2s = open("/tmp/fifo/fifo_c2s", O_WRONLY);
     if (fd_c2s == -1) {
@@ -75,10 +79,6 @@ int main(int argc, char *argv[]) {
         perror("Error opening fifo_s2c");
         handle_error("Please check if the server is running.\n");
     }
-
-    // 사용자 지정 파일 열기
-    int fd_input = open(argv[1], O_RDONLY);
-    if (fd_input == -1) handle_error("Fail to open input file: %s\n", argv[1]);
 
     // 시간 측정 구조체
     struct timespec start_time, end_time;
@@ -236,12 +236,11 @@ ssize_t receive_message(int fd, MessageHeader *header, void **buf) {
     return bytes_read;
 }
 
-
 // 프로세스당 파일 하나 처리용임 여러 파일 처리하려면 파일 구조체 필요
-// 질문 리스트
-// malloc 시 타입 캐스팅?
-// free(NULL) 의미?
-// memcpy, memmove NULL 반환값 예외 처리?
+// xTODO 질문 리스트
+// C에서 malloc 시 타입 캐스팅? -> 필요없음?
+// free(NULL) 의미? -> 아무것도 안함
+// memcpy, memmove 등 NULL 반환값 예외 처리 필요? -> 없음?
 char *read_line(int fd, size_t *out_len) {
     static char *stash_buf = NULL;
     static size_t stash_len = 0;
@@ -271,6 +270,14 @@ char *read_line(int fd, size_t *out_len) {
     size_t line_len = 0;
     while ((new_line_ptr = memchr(stash_buf, '\n', stash_len)) == NULL) {  // stash_buf에 줄이 있는지 확인
         if ((bytes_read = read(fd, read_buf, BUFFER_SIZE)) == -1) goto error;  // 파일에서 읽기
+
+        // xTODO: EOF 처리 설계 질문 (해결)
+        // 마지막 read() 이후 stash_buf에 \n 포함 여러 줄이 남는 경우,
+        // 현재 로직이 한 줄씩 처리하는 게 맞는지?
+        // 아래 EOF 블록은 오직 '\n' 없는 마지막 조각만 처리하는 게 맞는지?
+        // -> 이 '예외 처리' 방식이 최선인지 궁금.
+        //
+        // 답: 마지막 read에서 0이 반환이 안된다. 그리고 버퍼에 \n이 있으면 안들어온다.
         if (bytes_read == 0) {  // EOF에 도달 했다면
             if (stash_len == 0) return NULL;  // 버퍼에 남은 줄이 없다면 NULL 반환
 
@@ -280,8 +287,6 @@ char *read_line(int fd, size_t *out_len) {
             line[stash_len] = '\0';
             if (out_len) *out_len = stash_len;
 
-            free(stash_buf);
-            stash_buf = NULL;
             stash_len = 0;
             return line;
         }
