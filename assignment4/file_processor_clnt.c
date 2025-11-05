@@ -99,7 +99,6 @@ int main(int argc, char *argv[]) {
     uint32_t mode = MODE_NUM;  // 모드를 초기화
     char *line = NULL;         // 한 줄 처리용 송신 임시 버퍼
     char *read_buf = NULL;     // 수신 버퍼
-    if ((read_buf = (char *)malloc(1)) == NULL) handle_error("Fail to allocate memory.\n");
 
     if ((mode = resolve_mode(argv[2])) == MODE_NUM)  // 현재 모드 처리
         handle_error("Error: Invalid mode '%s'. Valid modes are: count, upper, lower, reverse.\n", argv[2]);
@@ -118,13 +117,13 @@ int main(int argc, char *argv[]) {
         // 서버에 헤더 및 데이터 송신
         header.line_bytes = len;  // 줄의 길이 헤더에 저장
         if (send_message(fd_c2s, &header, line) == -1) handle_error("Fail to send message: %s\n", line);
-        printf("%lu번째 줄 전송...", stats.total_proc_lines);  // 처리 과정 출력
+        printf("%zu번째 줄 전송...", stats.total_proc_lines);  // 처리 과정 출력
 
         // 서버에서 헤더 및 데이터 수신
         if (receive_message(fd_s2c, &header, (void **)&read_buf) == -1) handle_error("Fail to receive message\n");
 
         // 정보 출력
-        printf("%lu번째 줄 결과 수신: %s\n", stats.total_proc_lines, read_buf);
+        printf("%zu번째 줄 결과 수신: %s\n", stats.total_proc_lines, read_buf);
 
         // line 메모리 해제로 메모리 누수 방지
         free(line);
@@ -337,7 +336,7 @@ error:
 void print_stats(const Stats *stats) {
     printf("=== 처리 통계 ===\n");
     printf("처리 모드: %s\n", stats->mode);
-    printf("처리한 줄 수: %lu\n", stats->total_proc_lines);
+    printf("처리한 줄 수: %zu\n", stats->total_proc_lines);
     printf("소요 시간: %.2lf초\n", stats->elapsed_time);
 }
 
