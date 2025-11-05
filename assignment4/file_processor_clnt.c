@@ -16,8 +16,9 @@
 #include <unistd.h>     // UNIX 표준 함수 (read, write, close)
 #include <fcntl.h>      // 파일 제어 (open 플래그, fcntl)
 
-#define BUFFER_SIZE       4096  // 읽기, 쓰기 버퍼 크기
-#define READ_LINE_CLEANUP -1    // read_line 클린업 모드
+#define BUFFER_SIZE       4096   // 읽기, 쓰기 버퍼 크기
+#define READ_LINE_CLEANUP -1     // read_line 클린업 모드
+#define END_MESSAGE       "END"  // 전송이 끝나면 서버에 알릴 메시지
 
 // 프로토콜 헤더 구조체
 typedef struct {
@@ -110,7 +111,7 @@ int main(int argc, char *argv[]) {
         // 서버에서 헤더 및 데이터 수신
         if (receive_message(fd_s2c, &header, (void **)&read_buf) == -1) handle_error("Fail to receive message\n");
 
-        //정보 출력
+        // 정보 출력
         printf("%lu번째 줄 결과 수신: %s\n", stats.total_proc_lines, read_buf);
 
         // line 메모리 해제로 메모리 누수 방지
@@ -119,8 +120,8 @@ int main(int argc, char *argv[]) {
     }
 
     // 프로세스 종료 END 메시지 전송
-    header.line_bytes = strlen("END");
-    if (send_message(fd_c2s, &header, "END") == -1) handle_error("Fail to send message: %s\n", "END");
+    header.line_bytes = strlen(END_MESSAGE);
+    if (send_message(fd_c2s, &header, END_MESSAGE) == -1) handle_error("Fail to send message: %s\n", END_MESSAGE);
     clock_gettime(CLOCK_MONOTONIC, &end_time);  // 시간 측정 종료
 
     // 처리 모드 및 처리 시간 저장
@@ -129,10 +130,7 @@ int main(int argc, char *argv[]) {
     stats.elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1e9;  // 나노초 -> 초
 
     // 통계 출력
-    printf("=== 처리 통계 ===\n");
-    printf("처리 모드: %s\n", stats.mode);
-    printf("처리한 줄 수: %lu\n", stats.total_proc_lines);
-    printf("소요 시간: %.2lf초\n", stats.elapsed_time);
+    print_stats(&stats);
 
     // read_line의 메모리 정리
     read_line(READ_LINE_CLEANUP, NULL);
@@ -140,9 +138,9 @@ int main(int argc, char *argv[]) {
     free(line);
     free(read_buf);
 
-    close(fd_input);
     close(fd_c2s);
     close(fd_s2c);
+    close(fd_input);
 
     return 0;
 }
@@ -157,9 +155,6 @@ uint32_t resolve_mode(const char *mode) {
             curr_mode = i;
             break;
         }
-
-    if (curr_mode == MODE_NUM)
-        return MODE_NUM;
 
     return curr_mode;
 }
@@ -223,15 +218,12 @@ ssize_t receive_message(int fd, MessageHeader *header, void **buf) {
     if (header->line_bytes == 0) return 0;
 
     // realloc 안전 처리
-    char *tmp_buf = (char *)realloc(*buf, header->line_bytes);
+    char *tmp_buf = (char *)realloc(*buf, header->line_bytes + 1);
     if (tmp_buf == NULL) return -1;
     *buf = tmp_buf;
 
-    if ((bytes_read = read_all(fd, *buf, header->line_bytes)) == -1) {
-        free(*buf);
-        *buf = NULL;
-        return -1;
-    }
+    if ((bytes_read = read_all(fd, *buf, header->line_bytes)) == -1) return -1;
+    else ((char *)*buf)[header->line_bytes] = '\0';
 
     return bytes_read;
 }
@@ -331,9 +323,10 @@ error:
 }
 
 void print_stats(const Stats *stats) {
+    printf("=== 처리 통계 ===\n");
     printf("처리 모드: %s\n", stats->mode);
     printf("처리한 줄 수: %lu\n", stats->total_proc_lines);
-    printf("소요 시간: %lf\n", stats->elapsed_time);
+    printf("소요 시간: %.2lf초\n", stats->elapsed_time);
 }
 
 // 에러 처리 및 종료
