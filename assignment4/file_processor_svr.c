@@ -59,10 +59,10 @@ ssize_t read_all(int, void *, size_t);                           // 읽기 무�
 ssize_t write_all(int, const void *, size_t);                    // 쓰기 무결성 보장
 ssize_t send_message(int, const MessageHeader *, const void *);  // 서버 데이터 송신
 ssize_t receive_message(int, MessageHeader *, void **);          // 서버 데이터 수신
-char *proc_count(char *);                                  // count모드 문자열 처리
-char *proc_upper(char *);                                  // upper모드 문자열 처리
-char *proc_lower(char *);                                  // lower모드 문자열 처리
-char *proc_reverse(char *);                                // reverse모드 문자열 처리
+char *proc_count(char *);                                        // count모드 문자열 처리
+char *proc_upper(char *);                                        // upper모드 문자열 처리
+char *proc_lower(char *);                                        // lower모드 문자열 처리
+char *proc_reverse(char *);                                      // reverse모드 문자열 처리
 void handle_error(const char *, ...);                            // 에러 처리
 
 int main(int argc, char *argv[]) {
