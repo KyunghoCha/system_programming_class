@@ -32,23 +32,32 @@ typedef struct {
     double elapsed_time;      // 처리 시간
 } Stats, *pStats;
 
-// 파일 구조체 (아직 안씀)
+// 모드 열거형
+// X-Macro 대체 가능
+typedef enum {
+    COUNT,    // 글자 및 단어 개수 세기
+    UPPER,    // 대문자로 변환
+    LOWER,    // 소문자로 변환
+    REVERSE,  // 반대로 출력
+    MODE_NUM  // 모드 갯수
+} Mode;
+
+// 메시지 타입 열거형 (아직 안씀, 구현x)
+// 나중에 확장하면 X-와 함수포인터를 응용
+typedef enum {
+    MSG_TYPE_NULL,
+    MSG_TYPE_MODE,
+    MSG_TYPE_STRING
+    // 앞으로 여러 타입이 있으면 계속 추가
+} MessageType;
+
+// 파일 구조체 (아직 안씀, 구현x)
 typedef struct {
     int fd;             // 파일 디스크립터
     char *stash_buf;    // 임시 저장 버퍼
     size_t stash_len;   // 입시 저장 버퍼 길이
     size_t stash_size;  // 임시 저장 버퍼 메모리 크기
 } rn_fd_t, *p_rn_fd_t;  // 이름 통일 필요
-
-// 모드 열거형
-// X-Macro 대체 가능
-enum Mode {
-    COUNT,    // 글자 및 단어 개수 세기
-    UPPER,    // 대문자로 변환
-    LOWER,    // 소문자로 변환
-    REVERSE,  // 반대로 출력
-    MODE_NUM  // 모드 갯수
-};
 
 uint32_t resolve_mode(const char *);                             // 모드 옵션 처리
 ssize_t read_all(int, void *, size_t);                           // 읽기 무결성 보장
@@ -95,8 +104,10 @@ int main(int argc, char *argv[]) {
         handle_error("Error: Invalid mode '%s'. Valid modes are: count, upper, lower, reverse.\n", argv[2]);
 
     header.line_bytes = sizeof(mode);
+    mode = htonl(mode);
     if (send_message(fd_c2s, &header, &mode) == -1)  // 서버에 처리 모드 전송
         handle_error("Fail to send mode: %s\n", argv[2]);
+    else mode = ntohl(mode);
 
     size_t len = 0;
     clock_gettime(CLOCK_MONOTONIC, &start_time);  // 시간 측정 시작
