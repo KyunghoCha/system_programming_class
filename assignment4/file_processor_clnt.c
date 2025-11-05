@@ -71,7 +71,7 @@ void handle_error(const char *, ...);                            // 에러 처�
 
 int main(int argc, char *argv[]) {
     // 사용자 입력 인자 갯수 확인
-    if (argc != 3) handle_error("Usage: file_processor_clnt <input_file> <mode>\n");
+    if (argc != 3) handle_error("Usage: %s <input_file> <mode>\n", argv[0]);
 
     // 사용자 지정 파일 열기
     int fd_input = open(argv[1], O_RDONLY);
