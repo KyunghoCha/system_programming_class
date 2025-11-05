@@ -87,19 +87,8 @@ int main(int argc, char *argv[]) {
     }
     umask(old_mask);
 
-    // FIFO 열기 (서버 관점: c2s는 읽기, s2c는 쓰기)
-    int fd_c2s = open("/tmp/fifo/fifo_c2s", O_RDONLY);
-    if (fd_c2s == -1) {
-        handle_error("open: failed to open /tmp/fifo/fifo_c2s: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    int fd_s2c = open("/tmp/fifo/fifo_s2c", O_WRONLY);
-    if (fd_s2c == -1) {
-        close(fd_c2s);
-        handle_error("open: failed to open /tmp/fifo/fifo_s2c: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+    int fd_c2s;
+    int fd_s2c;
 
     MessageHeader header = { .line_bytes = 0 };
     char *read_buf = NULL;
@@ -115,22 +104,35 @@ int main(int argc, char *argv[]) {
 
     // 서버 메인 루프
     while (1) {
+        // FIFO 열기
+        fd_c2s = open("/tmp/fifo/fifo_c2s", O_RDONLY);
+        if (fd_c2s == -1) {
+            handle_error("open: failed to open /tmp/fifo/fifo_c2s: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        fd_s2c = open("/tmp/fifo/fifo_s2c", O_WRONLY);
+        if (fd_s2c == -1) {
+            close(fd_c2s);
+            handle_error("open: failed to open /tmp/fifo/fifo_s2c: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
         uint32_t mode = MODE_NUM;
         read_buf = NULL;
         proc_buf = NULL;
 
         // 모드 수신
-        if (read_all(fd_c2s, &header, sizeof(MessageHeader)) == -1) {
+        ssize_t len = 0;
+        if ((len = read_all(fd_c2s, &header, sizeof(MessageHeader))) == -1) {
             handle_error("read_all: failed to receive mode header");
             continue;
-        }
-        header.line_bytes = ntohl(header.line_bytes);
+        } else header.line_bytes = ntohl(header.line_bytes);
+        if (len == 0) continue;
 
         if (read_all(fd_c2s, &mode, header.line_bytes) == -1) {
             handle_error("read_all: failed to receive mode");
             continue;
-        }
-        mode = ntohl(mode);
+        } else mode = ntohl(mode);
 
         if (mode >= MODE_NUM) {
             handle_error("error: invalid mode %u received\n", mode);
@@ -179,6 +181,7 @@ int main(int argc, char *argv[]) {
             read_buf = NULL;
             proc_buf = NULL;
         }
+        printf("\n");
     }
 
     close(fd_c2s);
