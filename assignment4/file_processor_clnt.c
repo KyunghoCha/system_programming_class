@@ -16,6 +16,7 @@
 #include <unistd.h>     // UNIX 표준 함수 (read, write, close)
 #include <fcntl.h>      // 파일 제어 (open 플래그, fcntl)
 
+// 나중에 헤더파일로 빼기
 #define BUFFER_SIZE       4096   // 읽기, 쓰기 버퍼 크기
 #define READ_LINE_CLEANUP -1     // read_line 클린업 모드
 #define END_MESSAGE       "END"  // 전송이 끝나면 서버에 알릴 메시지
