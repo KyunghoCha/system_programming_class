@@ -107,6 +107,7 @@ int main(int argc, char *argv[]) {
     mode = htonl(mode);
     if (send_message(fd_c2s, &header, &mode) == -1)  // 서버에 처리 모드 전송
         handle_error("Fail to send mode: %s\n", argv[2]);
+    else mode = ntohl(mode);
 
     size_t len = 0;
     clock_gettime(CLOCK_MONOTONIC, &start_time);  // 시간 측정 시작
